@@ -28,6 +28,12 @@ jobs:
       - name: Build iSH sandbox (framework + Alpine rootfs)
         run: Scripts/build-ish-sandbox.sh all
 
+      - name: Record hashes of the iSH artifacts we just built
+        run: |
+          Scripts/record-artifact.sh Vendor/OpenMinisISH/Artifacts/HarnessISH.xcframework.zip openminis-ishArm64 false
+          Scripts/record-artifact.sh Vendor/OpenMinisISH/Artifacts/RootfsPatch.bundle.zip ishArm64 false
+          Scripts/record-artifact.sh Vendor/OpenMinisISH/Artifacts/alpine-rootfs.zip alpineRootfs-openminis-ishArm64 false
+
       - name: Build app (no signing)
         run: |
           set -o pipefail
