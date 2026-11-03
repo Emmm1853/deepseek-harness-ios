@@ -1,0 +1,66 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Install build tools
+        run: |
+          brew install llvm lld libarchive ninja
+          echo "$(brew --prefix lld)/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch iSH / OpenMinis sources
+        run: Scripts/fetch-upstreams.sh openminis ishArm64
+
+      - name: Build iSH sandbox (framework + Alpine rootfs)
+        run: Scripts/build-ish-sandbox.sh all
+
+      - name: Build app (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project HarnessMobile.xcodeproj \
+            -scheme HarnessMobile \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package IPA
+        run: |
+          APP="$(find "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' | head -1)"
+          echo "App: $APP"
+          test -n "$APP"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$GITHUB_WORKSPACE/HarnessMobile-unsigned.ipa" Payload
+          ls -lh "$GITHUB_WORKSPACE/HarnessMobile-unsigned.ipa"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HarnessMobile-unsigned-ipa
+          path: HarnessMobile-unsigned.ipa
+          retention-days: 14
